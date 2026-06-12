@@ -1,13 +1,14 @@
 {
   "name": "tesla-manager",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "dev": "yarn workspace @tesla-manager/desktop dev",
     "build": "yarn workspace @tesla-manager/client build && yarn workspace @tesla-manager/desktop build",
+    "predist": "node scripts/sync-version.js",
     "dist": "yarn build && yarn workspace @tesla-manager/desktop dist",
     "typecheck": "yarn workspace @tesla-manager/client typecheck && yarn workspace @tesla-manager/desktop typecheck",
     "postinstall": "node scripts/install-electron.js"

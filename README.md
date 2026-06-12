@@ -4,15 +4,17 @@ A desktop app for browsing, reviewing, and exporting Tesla dashcam footage. Poin
 
 ## Download
 
-Pre-built Windows installers are published automatically on every push to `main`.
+Pre-built Windows installers are published when the `version` field in the root `package.json` changes on `main`.
 
-**[Download the latest release](https://github.com/YOUR_GITHUB_USERNAME/teslamanager/releases/latest)**
+**[Download the latest release](https://github.com/pieczorx/tesla-manager/releases/latest)**
 
 | Platform | File |
 | --- | --- |
 | Windows (x64) | `Tesla-Manager-Setup-x.x.x.exe` |
 
 No account or sign-up required. Pick the newest release, download the installer, and run it.
+
+Installed copies check [GitHub Releases](https://github.com/pieczorx/tesla-manager/releases) for updates automatically and download them in the background.
 
 ## Features
 
@@ -95,11 +97,13 @@ yarn build
 
 ### Package a Windows installer
 
+Bump `version` in the root `package.json`, then:
+
 ```bash
 yarn dist
 ```
 
-Installers are written to the `release/` directory at the repo root.
+This syncs the version into workspace packages, builds the app, and writes the installer to the `release/` directory at the repo root. Pushing that version bump to `main` triggers the GitHub Actions release.
 
 ## Project structure
 

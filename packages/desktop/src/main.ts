@@ -3,6 +3,7 @@ import * as path from 'node:path'
 import { registerIpc, setMainWindow, setupMainWindowListeners } from './ipc'
 import { registerAssetProtocol } from './protocol/assetProtocol'
 import { getScanFolders, mergeClips, saveClips } from './storage'
+import { setupAutoUpdater } from './services/autoUpdater'
 import { DashcamScanner } from './services/dashcamScanner'
 
 protocol.registerSchemesAsPrivileged([
@@ -76,6 +77,7 @@ app.whenReady().then(async () => {
   registerAssetProtocol()
   registerIpc()
   await createWindow()
+  void setupAutoUpdater()
   await scanOnStartup()
 
   app.on('activate', async () => {

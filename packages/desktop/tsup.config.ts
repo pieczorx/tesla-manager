@@ -10,5 +10,5 @@ export default defineConfig({
   outExtension: () => ({ js: '.cjs' }),
   sourcemap: true,
   clean: true,
-  external: ['electron'],
+  external: ['electron', 'electron-updater'],
 })
