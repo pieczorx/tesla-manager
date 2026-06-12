@@ -1,13 +1,13 @@
 {
   "name": "@tesla-manager/desktop",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "main": "dist/main.cjs",
   "scripts": {
     "predev": "kill-port 5173",
     "dev": "concurrently --kill-others-on-fail -n CLIENT,BUILD,ELECTRON -c cyan,yellow,green \"yarn --cwd ../client dev --host\" \"tsup --watch\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electronmon dist/main.cjs\"",
     "build": "tsup",
-    "dist": "electron-builder --config electron-builder.yml",
+    "dist": "electron-builder --config electron-builder.yml --publish never",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -42,6 +42,9 @@ jobs:
 
       - name: Build Electron app
         if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
         run: yarn dist
 
       - name: Publish GitHub Release
@@ -52,7 +55,7 @@ jobs:
           name: Tesla Manager v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
-            release/*.exe
+            release/Tesla-Manager-Setup-${{ steps.version.outputs.version }}.exe
             release/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
