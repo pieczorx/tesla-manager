@@ -1,0 +1,38 @@
+appId: dev.teslamanager.app
+productName: Tesla Manager
+copyright: Copyright © 2026 Tesla Manager contributors
+electronVersion: 35.7.5
+
+directories:
+  output: ../../release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+
+extraResources:
+  - from: ../client/dist
+    to: client/dist
+    filter:
+      - "**/*"
+
+asar: true
+asarUnpack:
+  - "**/node_modules/ffmpeg-static/**"
+  - "**/node_modules/ffprobe-static/**"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Tesla-Manager-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+publish: null

@@ -1,0 +1,21 @@
+{
+  "name": "tesla-manager",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "yarn workspace @tesla-manager/desktop dev",
+    "build": "yarn workspace @tesla-manager/client build && yarn workspace @tesla-manager/desktop build",
+    "dist": "yarn build && yarn workspace @tesla-manager/desktop dist",
+    "typecheck": "yarn workspace @tesla-manager/client typecheck && yarn workspace @tesla-manager/desktop typecheck",
+    "postinstall": "node scripts/install-electron.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
+    "kill-port": "^2.0.1"
+  },
+  "packageManager": "yarn@4.16.0"
+}
