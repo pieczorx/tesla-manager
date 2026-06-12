@@ -1,3 +1,5 @@
+<img width="1984" height="1291" alt="image" src="https://github.com/user-attachments/assets/ebf9e687-7628-4074-bdb6-27032235cf82" />
+
 # Tesla Manager
 
 A desktop app for browsing, reviewing, and exporting Tesla dashcam footage. Point it at your `TeslaCam` folders on a USB drive or local copy, and manage saved events from one place.
