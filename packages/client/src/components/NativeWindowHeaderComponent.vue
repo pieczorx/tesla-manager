@@ -2,9 +2,11 @@
 import { computed } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import FloatingTooltipComponent from '@/components/FloatingTooltipComponent.vue'
+import { useAppUpdateStore } from '@/stores/appUpdate'
 import { useNativeWindowStore } from '@/stores/nativeWindow'
 
 const nativeWindowStore = useNativeWindowStore()
+const appUpdateStore = useAppUpdateStore()
 
 const maximizeIcon = computed(() =>
   nativeWindowStore.isFullscreen || nativeWindowStore.isMaximized
@@ -24,6 +26,23 @@ const displayVersion = computed(() => __APP_VERSION__)
       <div class="native-window-header__brand">
         <span class="native-window-header__title">Tesla Manager</span>
         <span class="native-window-header__version">{{ displayVersion }}</span>
+      </div>
+
+      <div v-if="appUpdateStore.updateLabel" class="native-window-header__update">
+        <span
+          class="native-window-header__update-label"
+          :class="{ 'native-window-header__update-label--ready': appUpdateStore.isUpdateReady }"
+        >
+          {{ appUpdateStore.updateLabel }}
+        </span>
+        <button
+          v-if="appUpdateStore.isUpdateReady"
+          type="button"
+          class="native-window-header__update-button"
+          @click="appUpdateStore.restartToUpdate()"
+        >
+          Restart to update
+        </button>
       </div>
 
       <div class="native-window-header__controls">
@@ -124,6 +143,46 @@ const displayVersion = computed(() => __APP_VERSION__)
   letter-spacing: 0.01em;
   color: var(--color-text-muted);
   white-space: nowrap;
+}
+
+.native-window-header__update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.native-window-header__update-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+
+  &--ready {
+    color: var(--color-success);
+  }
+}
+
+.native-window-header__update-button {
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--color-success);
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: var(--color-success);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+
+  &:hover {
+    background: var(--color-success);
+    border-color: var(--color-success);
+    color: #ffffff;
+  }
 }
 
 .native-window-header__controls {

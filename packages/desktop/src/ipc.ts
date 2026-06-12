@@ -37,6 +37,7 @@ import {
   type ScanProgressPayload,
 } from './shared/types'
 import { encodeAssetFilePath } from './protocol/assetProtocol'
+import { getUpdateStatus, quitAndInstallUpdate } from './services/autoUpdater'
 
 const scanner = new DashcamScanner()
 let mainWindow: BrowserWindowType | null = null
@@ -332,6 +333,10 @@ export function registerIpc() {
   ipcMain.handle(IPC.window.getMaximized, () => getMainWindow().isMaximized())
 
   ipcMain.handle(IPC.window.getFullscreen, () => getMainWindow().isFullScreen())
+
+  ipcMain.handle(IPC.update.getStatus, () => getUpdateStatus())
+
+  ipcMain.handle(IPC.update.quitAndInstall, () => quitAndInstallUpdate())
 }
 
 export function setupMainWindowListeners(window: BrowserWindowType) {

@@ -90,6 +90,15 @@ export interface ExportProgressPayload {
   progress: number
 }
 
+export type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready' | 'error'
+
+export interface UpdateStatusPayload {
+  status: UpdateStatus
+  version: string | null
+  progress: number | null
+  error: string | null
+}
+
 export const IPC = {
   settings: {
     getScanFolders: 'settings:getScanFolders',
@@ -132,6 +141,11 @@ export const IPC = {
     getFullscreen: 'window:getFullscreen',
     onMaximizeChange: 'window:onMaximizeChange',
     onFullscreenChange: 'window:onFullscreenChange',
+  },
+  update: {
+    getStatus: 'update:getStatus',
+    quitAndInstall: 'update:quitAndInstall',
+    onStatusChange: 'update:onStatusChange',
   },
 } as const
 

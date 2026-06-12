@@ -9,6 +9,7 @@ import type {
   ExportProgressPayload,
   ScanFolder,
   ScanProgressPayload,
+  UpdateStatusPayload,
 } from './shared/types'
 
 contextBridge.exposeInMainWorld('teslaManager', {
@@ -99,6 +100,16 @@ contextBridge.exposeInMainWorld('teslaManager', {
       const listener = (_event: Electron.IpcRendererEvent, state: boolean) => callback(state)
       ipcRenderer.on(IPC.window.onFullscreenChange, listener)
       return () => ipcRenderer.off(IPC.window.onFullscreenChange, listener)
+    },
+  },
+  update: {
+    getStatus: () => ipcRenderer.invoke(IPC.update.getStatus) as Promise<UpdateStatusPayload>,
+    quitAndInstall: () => ipcRenderer.invoke(IPC.update.quitAndInstall) as Promise<void>,
+    onStatusChange: (callback: (payload: UpdateStatusPayload) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: UpdateStatusPayload) =>
+        callback(payload)
+      ipcRenderer.on(IPC.update.onStatusChange, listener)
+      return () => ipcRenderer.off(IPC.update.onStatusChange, listener)
     },
   },
 })

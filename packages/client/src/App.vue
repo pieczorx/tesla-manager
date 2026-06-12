@@ -4,22 +4,26 @@ import SidebarComponent from '@/components/SidebarComponent.vue'
 import NativeWindowHeaderComponent from '@/components/NativeWindowHeaderComponent.vue'
 import { useDashcamStore, useSettingsStore } from '@/stores'
 import { useNativeWindowStore } from '@/stores/nativeWindow'
+import { useAppUpdateStore } from '@/stores/appUpdate'
 
 const dashcamStore = useDashcamStore()
 const settingsStore = useSettingsStore()
 const nativeWindowStore = useNativeWindowStore()
+const appUpdateStore = useAppUpdateStore()
 
 const isNativeApp = computed(() => !!window.teslaManager)
 
 onMounted(() => {
   dashcamStore.bindIpcListeners()
   void nativeWindowStore.initialize()
+  void appUpdateStore.initialize()
   void settingsStore.loadPlaybackSettings()
 })
 
 onUnmounted(() => {
   dashcamStore.unbindIpcListeners()
   nativeWindowStore.dispose()
+  appUpdateStore.dispose()
 })
 </script>
 

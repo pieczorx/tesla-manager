@@ -82,6 +82,15 @@ export interface ExportProgressPayload {
   progress: number
 }
 
+export type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready' | 'error'
+
+export interface UpdateStatusPayload {
+  status: UpdateStatus
+  version: string | null
+  progress: number | null
+  error: string | null
+}
+
 export interface TeslaManagerApi {
   platform: 'aix' | 'android' | 'darwin' | 'freebsd' | 'haiku' | 'linux' | 'openbsd' | 'sunos' | 'win32' | 'cygwin' | 'netbsd'
   settings: {
@@ -137,6 +146,11 @@ export interface TeslaManagerApi {
     getFullscreen: () => Promise<boolean>
     onMaximizeChange: (callback: (state: boolean) => void) => () => void
     onFullscreenChange: (callback: (state: boolean) => void) => () => void
+  }
+  update: {
+    getStatus: () => Promise<UpdateStatusPayload>
+    quitAndInstall: () => Promise<void>
+    onStatusChange: (callback: (payload: UpdateStatusPayload) => void) => () => void
   }
 }
 
