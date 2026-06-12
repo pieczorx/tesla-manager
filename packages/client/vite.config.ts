@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+
+const appVersion = JSON.parse(
+  readFileSync(resolve(__dirname, '../../package.json'), 'utf8'),
+).version as string
 
 const fontAwesomeScripts = [
   './assets/fontawesome/fontawesome.min.js',
@@ -27,6 +32,9 @@ export default defineConfig({
   base: './',
   root: 'src',
   publicDir: resolve(__dirname, 'public'),
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   plugins: [vue(), fontAwesomeHtmlPlugin()],
   resolve: {
     alias: {

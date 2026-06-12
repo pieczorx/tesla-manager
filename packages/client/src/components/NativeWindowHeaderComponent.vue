@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import FloatingTooltipComponent from '@/components/FloatingTooltipComponent.vue'
 import { useNativeWindowStore } from '@/stores/nativeWindow'
-import appPackage from '../../../../package.json'
 
 const nativeWindowStore = useNativeWindowStore()
 
@@ -13,7 +12,7 @@ const maximizeIcon = computed(() =>
     : (['fas', 'expand'] as const),
 )
 
-const displayVersion = computed(() => appPackage.version.replace(/\.0$/, ''))
+const displayVersion = computed(() => __APP_VERSION__)
 </script>
 
 <template>

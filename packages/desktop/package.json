@@ -1,7 +1,7 @@
 {
   "name": "@tesla-manager/desktop",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "dist/main.cjs",
   "scripts": {
     "predev": "kill-port 5173",
