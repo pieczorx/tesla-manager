@@ -1,4 +1,5 @@
-<img width="1984" height="1291" alt="image" src="https://github.com/user-attachments/assets/ebf9e687-7628-4074-bdb6-27032235cf82" />
+<img width="836" height="512" alt="image" src="https://github.com/user-attachments/assets/16660bd7-b88e-4a81-8a86-118492fff76b" />
+
 
 # Tesla Manager
 
