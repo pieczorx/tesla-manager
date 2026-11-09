@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 import type { DashcamClip, ScanProgress, TeslaEventJson } from '../shared/types'
-import { computeClipTiming } from '../utils/clipTiming'
+import { computeClipTiming, parseVideoSegmentStart, TESLA_SEGMENT_DURATION_SECONDS } from '../utils/clipTiming'
+import { getVideoThumbnail } from '../utils/thumbnailGenerator'
 import { probeVideoDuration } from '../utils/videoProbe'
 import { isEncryptedFile } from './teslaDecrypt/container'
 
@@ -138,7 +139,38 @@ function eventFromFolderName(folderPath: string) {
   }
 }
 
-async function processEventFolder(folderPath: string): Promise<DashcamClip | null> {
+/**
+ * Picks the front-camera frame at the event moment (what Tesla's own thumb.png shows), or the
+ * closest playable video when there is no front camera.
+ */
+function pickThumbnailFrame(
+  videoFiles: string[],
+  encryptedFlags: boolean[],
+  clipStartIso: string | null,
+  eventOffsetSeconds: number | null,
+  segmentDurations: Record<string, number>,
+): { videoPath: string; seekSeconds: number } | null {
+  const playable = videoFiles
+    .filter((_, index) => !encryptedFlags[index])
+    .map((filePath) => ({ filePath, start: parseVideoSegmentStart(filePath) }))
+    .filter((item): item is { filePath: string; start: Date } => item.start !== null)
+  if (playable.length === 0) {
+    return null
+  }
+  const front = playable.filter((item) => /-front\.mp4$/i.test(item.filePath))
+  const candidates = (front.length > 0 ? front : playable).sort((a, b) => a.start.getTime() - b.start.getTime())
+
+  const clipStart = clipStartIso ? new Date(clipStartIso).getTime() : candidates[0]!.start.getTime()
+  const eventTime = clipStart + (eventOffsetSeconds ?? 0) * 1000
+  const segment = [...candidates].reverse().find((item) => item.start.getTime() <= eventTime) ?? candidates[0]!
+
+  const timestampKey = path.basename(segment.filePath).match(VIDEO_TIMESTAMP_PATTERN)?.[1]
+  const segmentDuration = (timestampKey && segmentDurations[timestampKey]) || TESLA_SEGMENT_DURATION_SECONDS
+  const seekSeconds = Math.min(Math.max(0, (eventTime - segment.start.getTime()) / 1000), Math.max(0, segmentDuration - 1))
+  return { videoPath: segment.filePath, seekSeconds }
+}
+
+async function processEventFolder(folderPath: string, options: DashcamScannerOptions): Promise<DashcamClip | null> {
   try {
     const eventJson = await readEventJson(folderPath)
     const event = eventJson ? parseEventJson(eventJson) : eventFromFolderName(folderPath)
@@ -146,7 +178,7 @@ async function processEventFolder(folderPath: string): Promise<DashcamClip | nul
       return null
     }
 
-    const [thumbnailPath, videoFiles] = await Promise.all([
+    const [teslaThumbnail, videoFiles] = await Promise.all([
       findThumbnail(folderPath),
       findVideoFiles(folderPath),
     ])
@@ -158,6 +190,22 @@ async function processEventFolder(folderPath: string): Promise<DashcamClip | nul
     }
     const segmentDurations = await probeSegmentDurations(videoFiles.filter((_, index) => !encryptedFlags[index]))
     const timing = computeClipTiming(event.timestamp, videoFiles, segmentDurations)
+
+    // An encrypted thumb.png is not an image; generate one from the video instead.
+    let thumbnailPath = teslaThumbnail && !(await isEncryptedFile(teslaThumbnail)) ? teslaThumbnail : null
+    const thumbnailCacheDir = options.thumbnailCacheDir?.() ?? null
+    if (!thumbnailPath && thumbnailCacheDir) {
+      const frame = pickThumbnailFrame(
+        videoFiles,
+        encryptedFlags,
+        timing.clipStartIso,
+        timing.eventOffsetSeconds,
+        segmentDurations,
+      )
+      if (frame) {
+        thumbnailPath = await getVideoThumbnail(frame.videoPath, frame.seekSeconds, thumbnailCacheDir)
+      }
+    }
 
     return {
       id: createClipId(folderPath),
@@ -191,6 +239,7 @@ async function processEventFolder(folderPath: string): Promise<DashcamClip | nul
 
 async function walkDirectory(
   directoryPath: string,
+  options: DashcamScannerOptions,
   onDirectoryVisited: (currentPath: string) => void,
   onClipFound?: () => void,
 ): Promise<DashcamClip[]> {
@@ -211,7 +260,7 @@ async function walkDirectory(
       EVENT_FOLDER_PATTERN.test(path.basename(currentPath)) &&
       entries.some((entry) => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name)))
     if (hasEventJson || isNamedEventFolder) {
-      const clip = await processEventFolder(currentPath)
+      const clip = await processEventFolder(currentPath, options)
       if (clip) {
         clips.push(clip)
         onClipFound?.()
@@ -230,7 +279,14 @@ async function walkDirectory(
   return clips
 }
 
+export interface DashcamScannerOptions {
+  /** Where generated thumbnails are cached; resolved lazily because it needs the Electron app to be ready. */
+  thumbnailCacheDir?: () => string
+}
+
 export class DashcamScanner {
+  constructor(private readonly options: DashcamScannerOptions = {}) {}
+
   private progress: ScanProgress = {
     status: 'idle',
     rootPath: null,
@@ -277,7 +333,7 @@ export class DashcamScanner {
         onProgress({...this.progress})
 
         let foundInRoot = 0
-        const clips = await walkDirectory(rootPath, (currentPath) => {
+        const clips = await walkDirectory(rootPath, this.options, (currentPath) => {
           this.progress.scannedDirectories += 1
           this.progress.currentPath = currentPath
           this.progress.foundEvents = allClips.length + foundInRoot

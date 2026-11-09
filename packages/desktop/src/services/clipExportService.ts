@@ -7,8 +7,7 @@ import { Transform } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
-import ffmpegPath from 'ffmpeg-static'
-import ffprobePath from 'ffprobe-static'
+import { getFfmpegPath, getFfprobePath } from '../utils/mediaBinaries'
 import type { DashcamClip } from '../shared/types'
 import {
   buildCameraTracks,
@@ -104,16 +103,6 @@ function buildCompatibleEncoderArgs(): string[] {
   ]
 }
 
-function getFfmpegPath(): string {
-  if (!ffmpegPath) {
-    throw new Error('ffmpeg binary is unavailable')
-  }
-  return ffmpegPath
-}
-
-function getFfprobePath(): string {
-  return ffprobePath.path
-}
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
