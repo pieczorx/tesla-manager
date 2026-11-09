@@ -306,6 +306,11 @@ onMounted(async () => {
           <strong v-for="(vin, index) in analysis.vins" :key="vin">{{ vin }}{{ index < analysis.vins.length - 1 ? ', ' : '' }}</strong>.
           Sign in with the Tesla account that owned {{ analysis.vins.length === 1 ? 'this car' : 'these cars' }} when the clips were recorded.
         </p>
+        <p v-if="analysis.keylessFiles" class="decrypt-view__muted">
+          {{ analysis.keylessFiles }} small file(s) such as <code>event.json</code> and <code>thumb.png</code> are encrypted
+          without key information, so Tesla can't provide a key for them. They are skipped - the clips still load and
+          play, only without the saved location, trigger reason and thumbnail.
+        </p>
         <p v-if="analysis.encryptedFiles === 0" class="decrypt-view__ok">
           <FontAwesomeIcon :icon="['fas', 'circle-check']" />
           Nothing to decrypt - all recordings in these folders are already playable.
@@ -500,6 +505,7 @@ onMounted(async () => {
           {{ progress.processedFiles }} / {{ progress.totalFiles }} files ·
           {{ progress.decrypted }} decrypted · {{ progress.copied }} copied · {{ progress.skipped }} skipped ·
           <span :class="{ 'decrypt-view__failed': progress.failed > 0 }">{{ progress.failed }} failed</span>
+          <template v-if="progress.unavailable"> · {{ progress.unavailable }} without a key (event.json / thumb.png)</template>
           · {{ formatBytes(progress.bytesDone) }} of {{ formatBytes(progress.bytesTotal) }}
         </div>
         <div v-if="progress.currentFile && isRunning" class="decrypt-view__source-path">{{ shortPath(progress.currentFile) }}</div>
