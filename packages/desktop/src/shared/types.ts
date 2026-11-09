@@ -55,6 +55,8 @@ export interface DecryptFileIssue {
 export interface DecryptAnalysis {
   sourcePaths: string[]
   encryptedFiles: number
+  /** Encrypted files without key metadata (event.json, thumb.png): Tesla cannot issue keys for them. */
+  keylessFiles: number
   encryptedBytes: number
   plainVideoFiles: number
   otherFiles: number
@@ -91,6 +93,8 @@ export interface DecryptJobProgress {
   copied: number
   skipped: number
   failed: number
+  /** Encrypted files Tesla cannot issue a key for (no key metadata); not counted as failures. */
+  unavailable: number
   bytesDone: number
   bytesTotal: number
   currentFile: string | null

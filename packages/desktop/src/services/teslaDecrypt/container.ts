@@ -1,4 +1,4 @@
-import { createDecipheriv, createHash, randomBytes } from 'node:crypto'
+import { createDecipheriv, createHash, ECDH, randomBytes } from 'node:crypto'
 import { open, rename, rm } from 'node:fs/promises'
 import * as path from 'node:path'
 
@@ -28,21 +28,25 @@ const KEY_ID_OFFSET = METADATA_OFFSET
 const KEY_ID_SIZE = 4
 const PUBLIC_KEY_OFFSET = KEY_ID_OFFSET + KEY_ID_SIZE
 const PUBLIC_KEY_SIZE = 65
-const VIN_OFFSET = PUBLIC_KEY_OFFSET + PUBLIC_KEY_SIZE
+const EC_COORDINATE_SIZE = 32
+/** The car drops leading zero bytes of a coordinate, so the key field is not always 65 bytes. */
+const MIN_PUBLIC_KEY_SIZE = 61
 const VIN_SIZE = 17
-const TIMESTAMP_OFFSET = VIN_OFFSET + VIN_SIZE
 const TIMESTAMP_SIZE = 8
-const WRAPPED_KEY_OFFSET = TIMESTAMP_OFFSET + TIMESTAMP_SIZE
 const WRAPPED_KEY_SIZE = 44
-const METADATA_END = WRAPPED_KEY_OFFSET + WRAPPED_KEY_SIZE
+const METADATA_END = PUBLIC_KEY_OFFSET + PUBLIC_KEY_SIZE + VIN_SIZE + TIMESTAMP_SIZE + WRAPPED_KEY_SIZE
 const AES_KEY_SIZE = 16
 const PAGES_PER_READ = 256
+const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/
 
 export interface EncryptedHeader {
   id: string
   plaintextSize: number
   keyId: number
+  /** Always a valid 65-byte uncompressed P-256 point (coordinates zero-padded). */
   publicKey: Buffer
+  /** The key bytes exactly as stored in the file; differs from `publicKey` when the car trimmed a zero byte. */
+  publicKeyRaw: Buffer
   vin: string
   timestamp: bigint
   wrappedKey: Buffer
@@ -51,6 +55,8 @@ export interface EncryptedHeader {
 export type ProbeResult =
   | { kind: 'plain' }
   | { kind: 'encrypted'; header: EncryptedHeader }
+  /** Encrypted, but the car wrote no key metadata, so Tesla cannot issue a key (event.json, thumb.png). */
+  | { kind: 'keyless' }
   | { kind: 'invalid'; reason: string }
 
 export class DecryptCancelledError extends Error {
@@ -71,15 +77,55 @@ export function hasEncryptedSignature(probe: Buffer): boolean {
   )
 }
 
+function isOnP256(point: Buffer) {
+  try {
+    ECDH.convertKey(point, 'prime256v1', undefined, undefined, 'compressed')
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Turns the stored key bytes into a 65-byte uncompressed point. When the car trimmed leading
+ * zero bytes, every split of the missing bytes between X and Y is tried and the one that lies
+ * on the curve wins.
+ */
+function normalizePublicKey(raw: Buffer): Buffer | null {
+  if (raw[0] !== 0x04) {
+    return null
+  }
+  const coordinates = raw.subarray(1)
+  const missing = 2 * EC_COORDINATE_SIZE - coordinates.length
+  if (missing === 0) {
+    return isOnP256(raw) ? raw : null
+  }
+  for (let xMissing = 0; xMissing <= missing; xMissing += 1) {
+    const xLength = EC_COORDINATE_SIZE - xMissing
+    const yLength = EC_COORDINATE_SIZE - (missing - xMissing)
+    if (xLength + yLength !== coordinates.length) {
+      continue
+    }
+    const point = Buffer.alloc(PUBLIC_KEY_SIZE)
+    point[0] = 0x04
+    coordinates.copy(point, 1 + xMissing, 0, xLength)
+    coordinates.copy(point, 1 + EC_COORDINATE_SIZE + (missing - xMissing), xLength)
+    if (isOnP256(point)) {
+      return point
+    }
+  }
+  return null
+}
+
 export function parseHeader(probe: Buffer, fileSize: number): ProbeResult {
   if (!hasEncryptedSignature(probe)) {
     return { kind: 'plain' }
   }
-  if (probe.length < METADATA_END || fileSize <= PAYLOAD_OFFSET) {
+  if (probe.length < KEY_ID_OFFSET + KEY_ID_SIZE || fileSize <= PAYLOAD_OFFSET) {
     return { kind: 'invalid', reason: 'File is truncated (recording was interrupted)' }
   }
   if (probe.subarray(KEY_ID_OFFSET, KEY_ID_OFFSET + KEY_ID_SIZE).equals(Buffer.alloc(KEY_ID_SIZE))) {
-    return { kind: 'invalid', reason: 'Encryption metadata was never written (recording was interrupted)' }
+    return { kind: 'keyless' }
   }
 
   const plaintextSizeBig = probe.readBigUInt64BE(0)
@@ -92,32 +138,39 @@ export function parseHeader(probe: Buffer, fileSize: number): ProbeResult {
     return { kind: 'invalid', reason: 'File is truncated (recording was interrupted)' }
   }
 
-  const publicKey = Buffer.from(probe.subarray(PUBLIC_KEY_OFFSET, PUBLIC_KEY_OFFSET + PUBLIC_KEY_SIZE))
-  if (publicKey[0] !== 0x04) {
-    return { kind: 'invalid', reason: 'Header contains an invalid public key' }
+  // The key field has no length prefix: find the length at which a valid VIN follows and the
+  // key bytes form a point on the curve. Longest first, since 65 bytes is the common case.
+  for (let keySize = PUBLIC_KEY_SIZE; keySize >= MIN_PUBLIC_KEY_SIZE; keySize -= 1) {
+    const vinOffset = PUBLIC_KEY_OFFSET + keySize
+    const wrappedKeyOffset = vinOffset + VIN_SIZE + TIMESTAMP_SIZE
+    if (probe.length < wrappedKeyOffset + WRAPPED_KEY_SIZE) {
+      continue
+    }
+    const vin = probe.subarray(vinOffset, vinOffset + VIN_SIZE).toString('latin1')
+    if (!VIN_PATTERN.test(vin)) {
+      continue
+    }
+    const publicKeyRaw = Buffer.from(probe.subarray(PUBLIC_KEY_OFFSET, vinOffset))
+    const publicKey = normalizePublicKey(publicKeyRaw)
+    if (!publicKey) {
+      continue
+    }
+    return {
+      kind: 'encrypted',
+      header: {
+        id: formatId(probe.subarray(ID_OFFSET, ID_OFFSET + ID_SIZE)),
+        plaintextSize,
+        keyId: probe.readUInt32BE(KEY_ID_OFFSET),
+        publicKey,
+        publicKeyRaw,
+        vin,
+        timestamp: probe.readBigUInt64BE(vinOffset + VIN_SIZE),
+        wrappedKey: Buffer.from(probe.subarray(wrappedKeyOffset, wrappedKeyOffset + WRAPPED_KEY_SIZE)),
+      },
+    }
   }
 
-  let vinEnd = VIN_OFFSET + VIN_SIZE
-  while (vinEnd > VIN_OFFSET && probe[vinEnd - 1] === 0) {
-    vinEnd -= 1
-  }
-  const vin = probe.subarray(VIN_OFFSET, vinEnd).toString('latin1')
-  if (vin.length !== VIN_SIZE || !/^[\x21-\x7e]+$/.test(vin)) {
-    return { kind: 'invalid', reason: 'Header contains an invalid VIN' }
-  }
-
-  return {
-    kind: 'encrypted',
-    header: {
-      id: formatId(probe.subarray(ID_OFFSET, ID_OFFSET + ID_SIZE)),
-      plaintextSize,
-      keyId: probe.readUInt32BE(KEY_ID_OFFSET),
-      publicKey,
-      vin,
-      timestamp: probe.readBigUInt64BE(TIMESTAMP_OFFSET),
-      wrappedKey: Buffer.from(probe.subarray(WRAPPED_KEY_OFFSET, WRAPPED_KEY_OFFSET + WRAPPED_KEY_SIZE)),
-    },
-  }
+  return { kind: 'invalid', reason: 'Unrecognised key metadata in the file header' }
 }
 
 /** Reads only the header bytes, so it is cheap enough to run on every file of a USB drive. */

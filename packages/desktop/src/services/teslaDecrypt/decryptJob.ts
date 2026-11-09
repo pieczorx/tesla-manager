@@ -30,6 +30,12 @@ interface PlanEntry {
   isVideo: boolean
   bytes: number
   header: EncryptedHeader | null
+  /** Retry with the key bytes exactly as stored, after Tesla rejected the normalized point. */
+  useRawPublicKey?: boolean
+}
+
+function canRetryWithRawKey(entry: PlanEntry) {
+  return !entry.useRawPublicKey && !!entry.header && !entry.header.publicKeyRaw.equals(entry.header.publicKey)
 }
 
 function isVideoFile(filePath: string) {
@@ -100,6 +106,7 @@ function emptyProgress(): DecryptJobProgress {
     copied: 0,
     skipped: 0,
     failed: 0,
+    unavailable: 0,
     bytesDone: 0,
     bytesTotal: 0,
     currentFile: null,
@@ -244,6 +251,7 @@ export class DecryptJobService {
       const vins = new Set<string>()
       const invalidFiles: DecryptFileIssue[] = []
       let encryptedFiles = 0
+      let keylessFiles = 0
       let encryptedBytes = 0
       let plainVideoFiles = 0
       let otherFiles = 0
@@ -262,6 +270,8 @@ export class DecryptJobService {
             samplePath = file.path
             sampleSize = file.size
           }
+        } else if (file.probe.kind === 'keyless') {
+          keylessFiles += 1
         } else if (file.probe.kind === 'invalid') {
           invalidFiles.push({ path: file.path, reason: file.probe.reason })
         } else if (file.isVideo) {
@@ -276,6 +286,7 @@ export class DecryptJobService {
       this.analysis = {
         sourcePaths: roots,
         encryptedFiles,
+        keylessFiles,
         encryptedBytes,
         plainVideoFiles,
         otherFiles,
@@ -320,6 +331,7 @@ export class DecryptJobService {
 
     const entries: PlanEntry[] = []
     const outputRoots = new Set<string>()
+    let unavailable = 0
 
     for (const root of this.analyzedRoots) {
       const anchor = mirrorAnchor(root)
@@ -330,7 +342,9 @@ export class DecryptJobService {
           continue
         }
         const destinationPath = path.join(outputFolder, path.relative(anchor, file.path))
-        if (file.probe.kind === 'encrypted') {
+        if (file.probe.kind === 'keyless') {
+          unavailable += 1
+        } else if (file.probe.kind === 'encrypted') {
           entries.push({
             sourcePath: file.path,
             destinationPath,
@@ -357,7 +371,7 @@ export class DecryptJobService {
     const rank = (entry: PlanEntry) => (entry.kind === 'copy' && !entry.isVideo ? 0 : entry.kind === 'decrypt' ? 1 : 2)
     entries.sort((a, b) => rank(a) - rank(b) || a.sourcePath.localeCompare(b.sourcePath))
 
-    return { entries, outputRoots: [...outputRoots] }
+    return { entries, outputRoots: [...outputRoots], unavailable }
   }
 
   async start(options: DecryptOptions) {
@@ -374,13 +388,14 @@ export class DecryptJobService {
       throw new Error('Connect your Tesla account first')
     }
 
-    const { entries, outputRoots } = this.buildPlan(options)
+    const { entries, outputRoots, unavailable } = this.buildPlan(options)
     this.options = options
     this.queue = entries
     this.progress = {
       ...emptyProgress(),
       status: 'running',
       message: 'Starting...',
+      unavailable,
       totalFiles: entries.length,
       bytesTotal: entries.reduce((sum, entry) => sum + entry.bytes, 0),
       outputRoots,
@@ -462,6 +477,17 @@ export class DecryptJobService {
     }
   }
 
+  /** Records a failed file, or puts it back in the queue for one retry with the raw key bytes. */
+  private failOrRetry(entry: PlanEntry, reason: string) {
+    if (canRetryWithRawKey(entry)) {
+      entry.useRawPublicKey = true
+      return
+    }
+    this.progress.bytesDone += entry.bytes
+    this.recordFailure({ path: entry.sourcePath, reason })
+    this.markProcessed(entry, 'failed')
+  }
+
   private async processDecrypt(entry: PlanEntry, key: Buffer, signal: AbortSignal) {
     this.progress.currentFile = entry.sourcePath
     this.emit()
@@ -483,9 +509,7 @@ export class DecryptJobService {
       if (error instanceof DecryptCancelledError) {
         throw error
       }
-      this.progress.bytesDone += entry.bytes
-      this.recordFailure({ path: entry.sourcePath, reason: error instanceof Error ? error.message : 'Decryption failed' })
-      this.markProcessed(entry, 'failed')
+      this.failOrRetry(entry, error instanceof Error ? error.message : 'Decryption failed')
     }
   }
 
@@ -551,7 +575,11 @@ export class DecryptJobService {
 
         let keys
         try {
-          keys = await requestFileKeys(token, batch.map((entry) => entry.header!), signal)
+          keys = await requestFileKeys(
+            token,
+            batch.map((entry) => ({ header: entry.header!, useRawPublicKey: entry.useRawPublicKey })),
+            signal,
+          )
           consecutiveBatchFailures = 0
         } catch (error) {
           if (error instanceof TeslaUnauthorizedError || signal.aborted) {
@@ -574,12 +602,7 @@ export class DecryptJobService {
         for (const entry of batch) {
           const result = keys.get(entry.header!.id)
           if (!result?.key) {
-            this.progress.bytesDone += entry.bytes
-            this.recordFailure({
-              path: entry.sourcePath,
-              reason: result?.error ? `Tesla: ${result.error}` : 'Tesla returned no key for this file',
-            })
-            this.markProcessed(entry, 'failed')
+            this.failOrRetry(entry, result?.error ? `Tesla: ${result.error}` : 'Tesla returned no key for this file')
             continue
           }
           await this.processDecrypt(entry, result.key, signal)

@@ -144,7 +144,7 @@ function registerDecryptIpc() {
       return { ok: false, message: 'Analyze a folder with encrypted recordings first - the test uses one of them.' }
     }
     try {
-      const result = (await requestFileKeys(token, [header])).get(header.id)
+      const result = (await requestFileKeys(token, [{ header }])).get(header.id)
       if (result?.key) {
         return { ok: true, message: `Tesla issued a key for a clip from VIN ${header.vin}. You are ready to decrypt.` }
       }

@@ -7,6 +7,9 @@ import { probeVideoDuration } from '../utils/videoProbe'
 import { isEncryptedFile } from './teslaDecrypt/container'
 
 const VIDEO_TIMESTAMP_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-/i
+const EVENT_FOLDER_PATTERN = /^(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})$/
+/** Folders that hold the SavedClips / SentryClips / RecentClips categories. */
+const CATEGORY_ROOT_NAMES = new Set(['teslacam', 'encryptedclips'])
 
 const THUMBNAIL_NAMES = ['thumb.png', 'thumb.jpg', 'thumbnail.png']
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.MP4'])
@@ -42,7 +45,7 @@ function parseEventJson(data: TeslaEventJson) {
 function inferClipCategory(folderPath: string): string | null {
   const normalized = folderPath.replace(/\\/g, '/')
   const segments = normalized.split('/').filter(Boolean)
-  const teslaCamIndex = segments.findIndex((segment) => segment.toLowerCase() === 'teslacam')
+  const teslaCamIndex = segments.findIndex((segment) => CATEGORY_ROOT_NAMES.has(segment.toLowerCase()))
   if (teslaCamIndex >= 0 && segments[teslaCamIndex + 1]) {
     return segments[teslaCamIndex + 1]
   }
@@ -106,16 +109,43 @@ async function findVideoFiles(folderPath: string): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b))
 }
 
-async function processEventFolder(folderPath: string): Promise<DashcamClip | null> {
-  const eventPath = path.join(folderPath, 'event.json')
+async function readEventJson(folderPath: string): Promise<TeslaEventJson | null> {
   try {
-    const raw = await readFile(eventPath, 'utf8')
-    const parsed = JSON.parse(raw) as unknown
-    if (!isValidTeslaEventJson(parsed)) {
+    const parsed = JSON.parse(await readFile(path.join(folderPath, 'event.json'), 'utf8')) as unknown
+    return isValidTeslaEventJson(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Tesla names event folders after the moment the clip was saved. Used when event.json is
+ * missing or unreadable - with encryption (firmware 2026.20+) the car encrypts event.json
+ * without key metadata, so it cannot be decrypted and the clip only has its folder name.
+ */
+function eventFromFolderName(folderPath: string) {
+  const match = path.basename(folderPath).match(EVENT_FOLDER_PATTERN)
+  if (!match) {
+    return null
+  }
+  const [, date, hours, minutes, seconds] = match
+  return {
+    timestamp: `${date}T${hours}:${minutes}:${seconds}`,
+    city: null,
+    latitude: null,
+    longitude: null,
+    reason: null,
+  }
+}
+
+async function processEventFolder(folderPath: string): Promise<DashcamClip | null> {
+  try {
+    const eventJson = await readEventJson(folderPath)
+    const event = eventJson ? parseEventJson(eventJson) : eventFromFolderName(folderPath)
+    if (!event) {
       return null
     }
 
-    const event = parseEventJson(parsed)
     const [thumbnailPath, videoFiles] = await Promise.all([
       findThumbnail(folderPath),
       findVideoFiles(folderPath),
@@ -123,6 +153,9 @@ async function processEventFolder(folderPath: string): Promise<DashcamClip | nul
     const encryptedFlags = await Promise.all(videoFiles.map((filePath) => isEncryptedFile(filePath)))
     const encryptedFileCount = encryptedFlags.filter(Boolean).length
     // ffprobe cannot read encrypted files; durations then come from the file name timestamps.
+    if (!eventJson && !videoFiles.some((filePath) => VIDEO_TIMESTAMP_PATTERN.test(path.basename(filePath)))) {
+      return null
+    }
     const segmentDurations = await probeSegmentDurations(videoFiles.filter((_, index) => !encryptedFlags[index]))
     const timing = computeClipTiming(event.timestamp, videoFiles, segmentDurations)
 
@@ -174,7 +207,10 @@ async function walkDirectory(
     }
 
     const hasEventJson = entries.some((entry) => entry.isFile() && entry.name.toLowerCase() === 'event.json')
-    if (hasEventJson) {
+    const isNamedEventFolder =
+      EVENT_FOLDER_PATTERN.test(path.basename(currentPath)) &&
+      entries.some((entry) => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name)))
+    if (hasEventJson || isNamedEventFolder) {
       const clip = await processEventFolder(currentPath)
       if (clip) {
         clips.push(clip)

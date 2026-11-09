@@ -25,14 +25,20 @@ interface BatchResponse {
  * The timestamp is a uint64 in the header. JSON.stringify cannot write a BigInt, and
  * Number would lose precision above 2^53, so it is spliced into the JSON as a raw literal.
  */
-function serializeRequest(headers: EncryptedHeader[]): string {
-  const items = headers.map((header) => {
+export interface KeyRequestItem {
+  header: EncryptedHeader
+  /** Send the key bytes exactly as stored instead of the normalized 65-byte point. */
+  useRawPublicKey?: boolean
+}
+
+function serializeRequest(requests: KeyRequestItem[]): string {
+  const items = requests.map(({ header, useRawPublicKey }) => {
     const item: Record<string, unknown> = {
       id: header.id,
       vin: header.vin,
       key_id: header.keyId,
       wrapped_key: header.wrappedKey.toString('base64'),
-      public_key: header.publicKey.toString('base64'),
+      public_key: (useRawPublicKey ? header.publicKeyRaw : header.publicKey).toString('base64'),
     }
     if (header.timestamp !== 0n) {
       item.timestamp = `__ts_${header.timestamp.toString()}__`
@@ -63,10 +69,10 @@ function sleep(ms: number, signal?: AbortSignal) {
  */
 export async function requestFileKeys(
   token: string,
-  headers: EncryptedHeader[],
+  items: KeyRequestItem[],
   signal?: AbortSignal,
 ): Promise<Map<string, FileKeyResult>> {
-  const body = serializeRequest(headers)
+  const body = serializeRequest(items)
   let lastError: unknown = null
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
