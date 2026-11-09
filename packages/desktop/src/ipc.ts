@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { rm } from 'node:fs/promises'
 import * as path from 'node:path'
 import { DecryptJobService } from './services/teslaDecrypt/decryptJob'
+import { getThumbnailCacheDir } from './storage'
 import {
   getAuthStatus,
   getToken,
@@ -55,7 +56,7 @@ import {
 import { encodeAssetFilePath } from './protocol/assetProtocol'
 import { getUpdateStatus, quitAndInstallUpdate } from './services/autoUpdater'
 
-const scanner = new DashcamScanner()
+const scanner = new DashcamScanner({ thumbnailCacheDir: getThumbnailCacheDir })
 let mainWindow: BrowserWindowType | null = null
 
 export function setMainWindow(window: BrowserWindowType | null) {

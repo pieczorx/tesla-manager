@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, protocol } from 'electron'
 import * as path from 'node:path'
 import { registerIpc, setMainWindow, setupMainWindowListeners } from './ipc'
 import { registerAssetProtocol } from './protocol/assetProtocol'
-import { getScanFolders, mergeClips, saveClips } from './storage'
+import { getScanFolders, getThumbnailCacheDir, mergeClips, saveClips } from './storage'
 import { setupAutoUpdater } from './services/autoUpdater'
 import { DashcamScanner } from './services/dashcamScanner'
 
@@ -64,7 +64,7 @@ async function scanOnStartup() {
     return
   }
 
-  const scanner = new DashcamScanner()
+  const scanner = new DashcamScanner({ thumbnailCacheDir: getThumbnailCacheDir })
   const discovered = await scanner.scanRoots(folders.map((folder) => folder.path), () => {
     // silent startup scan
   })

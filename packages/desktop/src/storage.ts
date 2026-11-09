@@ -1,3 +1,5 @@
+import { app } from 'electron'
+import * as path from 'node:path'
 import Store from 'electron-store'
 import type { AppState, DashcamClip, PlaybackSettings, ScanFolder, ClipsUpdatedPayload } from './shared/types'
 import { DEFAULT_PLAYBACK_SETTINGS } from './shared/types'
@@ -192,6 +194,11 @@ export function setPlaybackSettings(settings: PlaybackSettings): PlaybackSetting
 
 export function getExportFolder(): string | null {
   return store.get('exportFolderPath', null)
+}
+
+/** Generated clip thumbnails live in the app's data folder, never next to the recordings. */
+export function getThumbnailCacheDir(): string {
+  return path.join(app.getPath('userData'), 'thumbnails')
 }
 
 export function getDecryptOutputFolder(): string | null {

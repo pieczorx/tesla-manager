@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process'
-import ffprobePath from 'ffprobe-static'
+import { getFfprobePath } from './mediaBinaries'
 
 export function probeVideoDuration(filePath: string): Promise<number | null> {
   return new Promise((resolve) => {
     const ffprobe = spawn(
-      ffprobePath.path,
+      getFfprobePath(),
       ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath],
       { windowsHide: true },
     )
