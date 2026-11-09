@@ -1,11 +1,25 @@
 import { randomUUID } from 'node:crypto'
 import { rm } from 'node:fs/promises'
+import * as path from 'node:path'
+import { DecryptJobService } from './services/teslaDecrypt/decryptJob'
+import {
+  getAuthStatus,
+  getToken,
+  invalidateToken,
+  onAuthStatusChange,
+  openLoginWindow,
+  setManualToken,
+  signOut,
+} from './services/teslaDecrypt/teslaAuth'
+import { requestFileKeys, TeslaUnauthorizedError } from './services/teslaDecrypt/teslaKeyApi'
 import { ipcMain, dialog, shell, BrowserWindow, type BrowserWindow as BrowserWindowType } from 'electron'
 import { DashcamScanner } from './services/dashcamScanner'
 import {
   addScanFolder,
   getClips,
+  getDecryptOutputFolder,
   getExportFolder,
+  setDecryptOutputFolder,
   getLastScanAt,
   getScanFolders,
   getPlaybackSettings,
@@ -32,7 +46,9 @@ import { copyFileToClipboard } from './utils/clipClipboard'
 import {
   IPC,
   type ClipsUpdatedPayload,
+  type ConnectionTestResult,
   type DashcamClip,
+  type DecryptOptions,
   type ExportClipRequest,
   type ScanProgressPayload,
 } from './shared/types'
@@ -83,6 +99,114 @@ async function performLibraryScan(): Promise<ClipsUpdatedPayload> {
 
   broadcast(IPC.dashcam.onClipsUpdated, payload)
   return payload
+}
+
+const decryptJob = new DecryptJobService({
+  getToken,
+  onUnauthorized: invalidateToken,
+  onProgress: (progress) => broadcast(IPC.decrypt.onProgress, progress),
+  onComplete: async (progress, options) => {
+    if (!options.addToLibrary || progress.decrypted + progress.copied === 0) {
+      return
+    }
+    for (const outputRoot of progress.outputRoots) {
+      addScanFolder({
+        id: randomUUID(),
+        path: outputRoot,
+        label: `${path.basename(outputRoot) || outputRoot} (decrypted)`,
+        addedAt: new Date().toISOString(),
+      })
+    }
+    await performLibraryScan().catch(() => undefined)
+  },
+})
+
+onAuthStatusChange((status) => broadcast(IPC.decrypt.onAuthStatus, status))
+
+function registerDecryptIpc() {
+  ipcMain.handle(IPC.decrypt.getAuthStatus, () => getAuthStatus())
+
+  ipcMain.handle(IPC.decrypt.openLogin, () =>
+    openLoginWindow(mainWindow && !mainWindow.isDestroyed() ? mainWindow : null, decryptJob.getAnalysis()?.samplePath ?? null),
+  )
+
+  ipcMain.handle(IPC.decrypt.setManualToken, (_event, token: string) => setManualToken(token))
+
+  ipcMain.handle(IPC.decrypt.signOut, () => signOut())
+
+  ipcMain.handle(IPC.decrypt.testConnection, async (): Promise<ConnectionTestResult> => {
+    const token = getToken()
+    if (!token) {
+      return { ok: false, message: 'Not connected to a Tesla account yet.' }
+    }
+    const header = decryptJob.getSampleHeader()
+    if (!header) {
+      return { ok: false, message: 'Analyze a folder with encrypted recordings first - the test uses one of them.' }
+    }
+    try {
+      const result = (await requestFileKeys(token, [header])).get(header.id)
+      if (result?.key) {
+        return { ok: true, message: `Tesla issued a key for a clip from VIN ${header.vin}. You are ready to decrypt.` }
+      }
+      return {
+        ok: false,
+        message: `Connected, but Tesla refused the key for VIN ${header.vin}: ${result?.error ?? 'no key returned'}. Sign in with the account that owned this car when it was recorded.`,
+      }
+    } catch (error) {
+      if (error instanceof TeslaUnauthorizedError) {
+        invalidateToken()
+        return { ok: false, message: 'Tesla rejected the session (it may have expired). Connect again.' }
+      }
+      return { ok: false, message: error instanceof Error ? error.message : 'Connection test failed' }
+    }
+  })
+
+  ipcMain.handle(IPC.decrypt.pickSourceFolder, async () => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      properties: ['openDirectory'],
+      title: 'Choose a folder with encrypted recordings',
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]!
+  })
+
+  ipcMain.handle(IPC.decrypt.analyze, (_event, sourcePaths: string[]) => decryptJob.analyze(sourcePaths))
+
+  ipcMain.handle(IPC.decrypt.getAnalysis, () => decryptJob.getAnalysis())
+
+  ipcMain.handle(IPC.decrypt.getOutputFolder, () => getDecryptOutputFolder())
+
+  ipcMain.handle(IPC.decrypt.pickOutputFolder, async () => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Choose where to save decrypted recordings',
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    return setDecryptOutputFolder(result.filePaths[0]!)
+  })
+
+  ipcMain.handle(IPC.decrypt.start, (_event, options: DecryptOptions) => decryptJob.start(options))
+
+  ipcMain.handle(IPC.decrypt.resume, () => decryptJob.resume())
+
+  ipcMain.handle(IPC.decrypt.cancel, () => decryptJob.cancel())
+
+  ipcMain.handle(IPC.decrypt.getProgress, () => decryptJob.getProgress())
+
+  ipcMain.handle(IPC.decrypt.revealOutput, async (_event, folderPath: string) => {
+    await shell.openPath(folderPath)
+  })
+
+  ipcMain.handle(IPC.decrypt.replaceSourcesInLibrary, async (_event, sourcePaths: string[]) => {
+    const targets = new Set(sourcePaths.map((item) => path.resolve(item).toLowerCase()))
+    for (const folder of getScanFolders()) {
+      if (targets.has(path.resolve(folder.path).toLowerCase())) {
+        removeScanFolder(folder.id)
+      }
+    }
+    return performLibraryScan()
+  })
 }
 
 export function registerIpc() {
@@ -333,6 +457,8 @@ export function registerIpc() {
   ipcMain.handle(IPC.window.getMaximized, () => getMainWindow().isMaximized())
 
   ipcMain.handle(IPC.window.getFullscreen, () => getMainWindow().isFullScreen())
+
+  registerDecryptIpc()
 
   ipcMain.handle(IPC.update.getStatus, () => getUpdateStatus())
 

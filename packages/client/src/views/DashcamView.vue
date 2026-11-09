@@ -15,6 +15,10 @@ import {
   type ClipListViewMode,
 } from '@/utils/clipFilters'
 import { groupClipsForList } from '@/utils/clipListGrouping'
+import { useRouter } from 'vue-router'
+import { RouteName } from '@/router/routeName'
+
+const router = useRouter()
 
 const dashcamStore = useDashcamStore()
 const settingsStore = useSettingsStore()
@@ -235,6 +239,15 @@ onMounted(async () => {
       </section>
 
       <section class="dashcam-view__preview-panel">
+        <div v-if="selectedClip?.encryptedFileCount" class="dashcam-view__encrypted-banner">
+          <FontAwesomeIcon :icon="['fas', 'lock']" />
+          <div>
+            <strong>This clip is encrypted by Tesla.</strong>
+            {{ selectedClip.encryptedFileCount }} of {{ selectedClip.videoFiles.length }} video file(s) can't be played
+            until you decrypt them with your Tesla account.
+          </div>
+          <button type="button" @click="router.push({ name: RouteName.Decrypt })">Decrypt recordings</button>
+        </div>
         <ClipPlayerComponent
           ref="playerRef"
           :clip="selectedClip"
@@ -397,5 +410,50 @@ onMounted(async () => {
 .dashcam-view__preview-panel {
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  > :last-child {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+.dashcam-view__encrypted-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--color-warning);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text);
+
+  > svg {
+    color: var(--color-warning);
+    flex-shrink: 0;
+  }
+
+  > div {
+    flex: 1;
+  }
+
+  strong {
+    color: var(--color-text-strong);
+  }
+
+  button {
+    flex-shrink: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 10px;
+    background: var(--color-accent);
+    color: #ffffff;
+    padding: 6px 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
 }
 </style>

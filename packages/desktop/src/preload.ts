@@ -2,7 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './shared/types'
 import type {
   ClipsUpdatedPayload,
+  ConnectionTestResult,
   DashcamClip,
+  DecryptAnalysis,
+  DecryptJobProgress,
+  DecryptOptions,
+  TeslaAuthStatus,
   ExportClipRequest,
   ExportPreparedResult,
   PrepareExportResult,
@@ -100,6 +105,38 @@ contextBridge.exposeInMainWorld('teslaManager', {
       const listener = (_event: Electron.IpcRendererEvent, state: boolean) => callback(state)
       ipcRenderer.on(IPC.window.onFullscreenChange, listener)
       return () => ipcRenderer.off(IPC.window.onFullscreenChange, listener)
+    },
+  },
+  decrypt: {
+    getAuthStatus: () => ipcRenderer.invoke(IPC.decrypt.getAuthStatus) as Promise<TeslaAuthStatus>,
+    openLogin: () => ipcRenderer.invoke(IPC.decrypt.openLogin) as Promise<TeslaAuthStatus>,
+    setManualToken: (token: string) =>
+      ipcRenderer.invoke(IPC.decrypt.setManualToken, token) as Promise<TeslaAuthStatus>,
+    signOut: () => ipcRenderer.invoke(IPC.decrypt.signOut) as Promise<TeslaAuthStatus>,
+    testConnection: () => ipcRenderer.invoke(IPC.decrypt.testConnection) as Promise<ConnectionTestResult>,
+    pickSourceFolder: () => ipcRenderer.invoke(IPC.decrypt.pickSourceFolder) as Promise<string | null>,
+    analyze: (sourcePaths: string[]) =>
+      ipcRenderer.invoke(IPC.decrypt.analyze, sourcePaths) as Promise<DecryptAnalysis>,
+    getAnalysis: () => ipcRenderer.invoke(IPC.decrypt.getAnalysis) as Promise<DecryptAnalysis | null>,
+    getOutputFolder: () => ipcRenderer.invoke(IPC.decrypt.getOutputFolder) as Promise<string | null>,
+    pickOutputFolder: () => ipcRenderer.invoke(IPC.decrypt.pickOutputFolder) as Promise<string | null>,
+    start: (options: DecryptOptions) => ipcRenderer.invoke(IPC.decrypt.start, options) as Promise<void>,
+    resume: () => ipcRenderer.invoke(IPC.decrypt.resume) as Promise<void>,
+    cancel: () => ipcRenderer.invoke(IPC.decrypt.cancel) as Promise<boolean>,
+    getProgress: () => ipcRenderer.invoke(IPC.decrypt.getProgress) as Promise<DecryptJobProgress>,
+    revealOutput: (folderPath: string) =>
+      ipcRenderer.invoke(IPC.decrypt.revealOutput, folderPath) as Promise<void>,
+    replaceSourcesInLibrary: (sourcePaths: string[]) =>
+      ipcRenderer.invoke(IPC.decrypt.replaceSourcesInLibrary, sourcePaths) as Promise<ClipsUpdatedPayload>,
+    onAuthStatus: (callback: (status: TeslaAuthStatus) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: TeslaAuthStatus) => callback(status)
+      ipcRenderer.on(IPC.decrypt.onAuthStatus, listener)
+      return () => ipcRenderer.off(IPC.decrypt.onAuthStatus, listener)
+    },
+    onProgress: (callback: (progress: DecryptJobProgress) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: DecryptJobProgress) => callback(progress)
+      ipcRenderer.on(IPC.decrypt.onProgress, listener)
+      return () => ipcRenderer.off(IPC.decrypt.onProgress, listener)
     },
   },
   update: {

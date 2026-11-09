@@ -64,6 +64,14 @@ Installed copies check [GitHub Releases](https://github.com/pieczorx/tesla-manag
 - Export progress indicator with cancel support
 - Reveal exported files in Explorer
 
+### Encrypted recordings (firmware 2026.20+)
+
+- Detects Tesla-encrypted clips during scanning and marks them with a lock
+- Guided "Decrypt recordings" screen: analyze a drive, sign in with Tesla, decrypt to a separate folder
+- Decryption runs locally; only each file's key header is sent to `dashcam.tesla.com` to obtain its key
+- Batch processing with progress, cancel/resume, skip-already-decrypted, and automatic library import
+- Originals on the USB drive are never modified
+
 ### Desktop experience
 
 - Native frameless window with custom title bar (minimize, maximize, fullscreen, close)

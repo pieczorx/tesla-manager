@@ -194,6 +194,16 @@ export function getExportFolder(): string | null {
   return store.get('exportFolderPath', null)
 }
 
+export function getDecryptOutputFolder(): string | null {
+  return store.get('decryptOutputFolder', null) ?? null
+}
+
+export function setDecryptOutputFolder(folderPath: string | null): string | null {
+  const normalized = folderPath?.trim() || null
+  store.set('decryptOutputFolder', normalized)
+  return normalized
+}
+
 export function setExportFolder(folderPath: string | null): string | null {
   const normalized = folderPath?.trim() || null
   store.set('exportFolderPath', normalized)

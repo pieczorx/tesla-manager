@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import type { DashcamClip, ScanProgress, TeslaEventJson } from '../shared/types'
 import { computeClipTiming } from '../utils/clipTiming'
 import { probeVideoDuration } from '../utils/videoProbe'
+import { isEncryptedFile } from './teslaDecrypt/container'
 
 const VIDEO_TIMESTAMP_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-/i
 
@@ -119,7 +120,10 @@ async function processEventFolder(folderPath: string): Promise<DashcamClip | nul
       findThumbnail(folderPath),
       findVideoFiles(folderPath),
     ])
-    const segmentDurations = await probeSegmentDurations(videoFiles)
+    const encryptedFlags = await Promise.all(videoFiles.map((filePath) => isEncryptedFile(filePath)))
+    const encryptedFileCount = encryptedFlags.filter(Boolean).length
+    // ffprobe cannot read encrypted files; durations then come from the file name timestamps.
+    const segmentDurations = await probeSegmentDurations(videoFiles.filter((_, index) => !encryptedFlags[index]))
     const timing = computeClipTiming(event.timestamp, videoFiles, segmentDurations)
 
     return {
@@ -145,6 +149,7 @@ async function processEventFolder(folderPath: string): Promise<DashcamClip | nul
       inOffsetSeconds: null,
       outOffsetSeconds: null,
       customTitle: null,
+      encryptedFileCount,
     }
   } catch {
     return null

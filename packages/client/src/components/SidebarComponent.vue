@@ -15,6 +15,11 @@ const items = [
     label: 'Dashcam',
   },
   {
+    name: RouteName.Decrypt,
+    icon: ['fas', 'unlock-keyhole'],
+    label: 'Decrypt recordings',
+  },
+  {
     name: RouteName.Settings,
     icon: ['fas', 'gear'],
     label: 'Settings',
