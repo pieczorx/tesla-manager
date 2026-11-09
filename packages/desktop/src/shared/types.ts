@@ -34,6 +34,75 @@ export interface DashcamClip {
   inOffsetSeconds: number | null
   outOffsetSeconds: number | null
   customTitle: string | null
+  /** Number of video files in this event that are Tesla-encrypted (firmware 2026.20+). */
+  encryptedFileCount?: number
+}
+
+export interface TeslaAuthStatus {
+  connected: boolean
+  source: 'browser' | 'manual' | null
+  connectedAt: string | null
+  loginWindowOpen: boolean
+  /** Progress of handing a sample clip to dashcam.tesla.com so it issues an API request. */
+  sampleState: 'idle' | 'waiting' | 'sent' | 'manual'
+}
+
+export interface DecryptFileIssue {
+  path: string
+  reason: string
+}
+
+export interface DecryptAnalysis {
+  sourcePaths: string[]
+  encryptedFiles: number
+  encryptedBytes: number
+  plainVideoFiles: number
+  otherFiles: number
+  totalBytes: number
+  eventFolders: number
+  vins: string[]
+  invalidFiles: DecryptFileIssue[]
+  samplePath: string | null
+  analyzedAt: string
+}
+
+export interface DecryptOptions {
+  outputFolder: string
+  copyUnencrypted: boolean
+  skipExisting: boolean
+  addToLibrary: boolean
+}
+
+export type DecryptJobStatus =
+  | 'idle'
+  | 'analyzing'
+  | 'running'
+  | 'paused-auth'
+  | 'complete'
+  | 'cancelled'
+  | 'error'
+
+export interface DecryptJobProgress {
+  status: DecryptJobStatus
+  message: string | null
+  totalFiles: number
+  processedFiles: number
+  decrypted: number
+  copied: number
+  skipped: number
+  failed: number
+  bytesDone: number
+  bytesTotal: number
+  currentFile: string | null
+  failures: DecryptFileIssue[]
+  outputRoots: string[]
+  startedAt: string | null
+  finishedAt: string | null
+}
+
+export interface ConnectionTestResult {
+  ok: boolean
+  message: string
 }
 
 export interface ScanFolder {
@@ -68,6 +137,7 @@ export interface AppState {
   lastScanAt: string | null
   playbackSettings: PlaybackSettings
   exportFolderPath: string | null
+  decryptOutputFolder?: string | null
 }
 
 export interface ExportClipRequest {
@@ -141,6 +211,26 @@ export const IPC = {
     getFullscreen: 'window:getFullscreen',
     onMaximizeChange: 'window:onMaximizeChange',
     onFullscreenChange: 'window:onFullscreenChange',
+  },
+  decrypt: {
+    getAuthStatus: 'decrypt:getAuthStatus',
+    openLogin: 'decrypt:openLogin',
+    setManualToken: 'decrypt:setManualToken',
+    signOut: 'decrypt:signOut',
+    testConnection: 'decrypt:testConnection',
+    pickSourceFolder: 'decrypt:pickSourceFolder',
+    analyze: 'decrypt:analyze',
+    getAnalysis: 'decrypt:getAnalysis',
+    getOutputFolder: 'decrypt:getOutputFolder',
+    pickOutputFolder: 'decrypt:pickOutputFolder',
+    start: 'decrypt:start',
+    resume: 'decrypt:resume',
+    cancel: 'decrypt:cancel',
+    getProgress: 'decrypt:getProgress',
+    revealOutput: 'decrypt:revealOutput',
+    replaceSourcesInLibrary: 'decrypt:replaceSourcesInLibrary',
+    onAuthStatus: 'decrypt:onAuthStatus',
+    onProgress: 'decrypt:onProgress',
   },
   update: {
     getStatus: 'update:getStatus',

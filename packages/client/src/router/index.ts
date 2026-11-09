@@ -14,6 +14,11 @@ const router = createRouter({
       component: () => import('@/views/DashcamView.vue'),
     },
     {
+      path: '/decrypt',
+      name: RouteName.Decrypt,
+      component: () => import('@/views/DecryptView.vue'),
+    },
+    {
       path: '/settings',
       name: RouteName.Settings,
       component: () => import('@/views/SettingsView.vue'),

@@ -40,6 +40,7 @@ const locationLabel = computed(() => {
 })
 
 const reasonPresentation = computed(() => getReasonPresentation(props.clip.reason))
+const isEncrypted = computed(() => (props.clip.encryptedFileCount ?? 0) > 0)
 
 const displayMarkers = computed(() => {
   if (!clipHasMarkerRange(props.clip)) {
@@ -89,7 +90,7 @@ function onDeleteClick(event: MouseEvent) {
       </div>
       <div class="clip-item__content">
         <div class="clip-item__title-row">
-          <div class="clip-item__title">{{ titleLabel }}</div>
+          <div class="clip-item__title"><FontAwesomeIcon v-if="isEncrypted" :icon="['fas', 'lock']" class="clip-item__lock" title="Encrypted - decrypt to play" />{{ titleLabel }}</div>
           <FloatingTooltipComponent v-if="showDelete" placement="top">
             <button
               type="button"
@@ -136,7 +137,7 @@ function onDeleteClick(event: MouseEvent) {
           <template #tooltip>Favourite</template>
         </FloatingTooltipComponent>
       </div>
-      <div class="clip-item__title clip-item__title--minimal">{{ titleLabel }}</div>
+      <div class="clip-item__title clip-item__title--minimal"><FontAwesomeIcon v-if="isEncrypted" :icon="['fas', 'lock']" class="clip-item__lock" title="Encrypted - decrypt to play" />{{ titleLabel }}</div>
       <span class="clip-item__location clip-item__location--minimal">{{ locationLabel }}</span>
       <FloatingTooltipComponent placement="top">
         <span class="clip-item__reason clip-item__reason--icon-only">
@@ -181,7 +182,7 @@ function onDeleteClick(event: MouseEvent) {
       </div>
       <div class="clip-item__content">
         <div class="clip-item__title-row">
-          <div class="clip-item__title">{{ titleLabel }}</div>
+          <div class="clip-item__title"><FontAwesomeIcon v-if="isEncrypted" :icon="['fas', 'lock']" class="clip-item__lock" title="Encrypted - decrypt to play" />{{ titleLabel }}</div>
           <FloatingTooltipComponent v-if="showDelete" placement="top">
             <button
               type="button"
@@ -335,6 +336,12 @@ function onDeleteClick(event: MouseEvent) {
     flex: initial;
     width: 100%;
   }
+}
+
+.clip-item__lock {
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--color-warning);
 }
 
 .clip-item__title-row {
